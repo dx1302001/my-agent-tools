@@ -40,8 +40,95 @@ TASKS_FILE = os.path.join(SHARED_DIR, "tasks.json")
 CONTEXT_FILE = os.path.join(SHARED_DIR, "context.json")
 CLAIMS_FILE = os.path.join(SHARED_DIR, "claims.json")
 
+# Obsidian vault for real-time sync
+VAULT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent-knowledge")
+VAULT_CHATS = os.path.join(VAULT_DIR, "10-Chats")
+VAULT_TASKS = os.path.join(VAULT_DIR, "20-Tasks")
+VAULT_DASHBOARD = os.path.join(VAULT_DIR, "Dashboard.md")
+
 # Ensure shared directory exists
 os.makedirs(SHARED_DIR, exist_ok=True)
+
+# ── Obsidian Real-time Sync ────────────────────────────────────
+def sync_to_obsidian(msg_dict):
+    """Write a message to the Obsidian vault in real-time."""
+    if not os.path.isdir(VAULT_DIR):
+        return  # vault doesn't exist, skip
+
+    try:
+        msg_type = msg_dict.get("type", "chat")
+        sender = msg_dict.get("from", "?")
+        to = msg_dict.get("to", "?")
+        content = msg_dict.get("content", "")
+        ts = msg_dict.get("timestamp", datetime.now().isoformat())
+        date_str = ts[:10] if ts else datetime.now().strftime("%Y-%m-%d")
+        time_str = ts[11:19] if len(ts) > 11 else ""
+
+        # ── Daily chat note ──
+        os.makedirs(VAULT_CHATS, exist_ok=True)
+        chat_file = os.path.join(VAULT_CHATS, f"{date_str}.md")
+
+        if not os.path.exists(chat_file):
+            with open(chat_file, "w", encoding="utf-8") as f:
+                f.write(f"---\n")
+                f.write(f"type: daily-chat\n")
+                f.write(f"date: {date_str}\n")
+                f.write(f"---\n\n")
+                f.write(f"# 📅 {date_str} · 协作日志\n\n")
+                f.write(f"| 时间 | 类型 | 来自 | 去向 | 内容 |\n")
+                f.write(f"|------|------|------|------|------|\n")
+
+        short_content = content[:100].replace("|", "\\|").replace("\n", " ")
+        with open(chat_file, "a", encoding="utf-8") as f:
+            f.write(f"| {time_str} | `{msg_type}` | {sender} | {to} | {short_content} |\n")
+
+        # ── Task notes ──
+        if msg_type == "delegate":
+            os.makedirs(VAULT_TASKS, exist_ok=True)
+            # Generate a task ID from content hash if not present
+            task_id = msg_dict.get("task_id") or f"T{hash(content) % 1000:03d}"
+            task_file = os.path.join(VAULT_TASKS, f"{task_id}-{content[:50]}.md".replace("/", "-")
+                                     .replace(":", "-").replace("?", "").replace("'", ""))
+            if not os.path.exists(task_file):
+                with open(task_file, "w", encoding="utf-8") as f:
+                    f.write(f"---\n")
+                    f.write(f"type: task\n")
+                    f.write(f"id: \"{task_id}\"\n")
+                    f.write(f"status: pending\n")
+                    f.write(f"from: \"{sender}\"\n")
+                    f.write(f"assigned_to: \"{to}\"\n")
+                    f.write(f"created: \"{ts}\"\n")
+                    f.write(f"---\n\n")
+                    f.write(f"# 📋 {task_id} · {content[:80]}\n\n")
+                    f.write(f"| 字段 | 值 |\n")
+                    f.write(f"|------|-----|\n")
+                    f.write(f"| 状态 | `pending` |\n")
+                    f.write(f"| 发起 | {sender} |\n")
+                    f.write(f"| 指派 | {to} |\n")
+                    f.write(f"| 创建 | {ts} |\n")
+                    f.write(f"\n## 描述\n\n{content}\n\n")
+                    f.write(f"## 🔗 关联\n")
+                    f.write(f"- 📅 [[10-Chats/{date_str}|{date_str} 聊天记录]]\n")
+
+        elif msg_type == "claim":
+            # Update task status in vault
+            os.makedirs(VAULT_TASKS, exist_ok=True)
+            for fname in os.listdir(VAULT_TASKS):
+                task_path = os.path.join(VAULT_TASKS, fname)
+                if fname.startswith(content.strip() + "-") or fname.startswith(content.strip()):
+                    with open(task_path, "r", encoding="utf-8") as f:
+                        task_content = f.read()
+                    task_content = task_content.replace("status: pending", f"status: in_progress")
+                    task_content = task_content.replace(
+                        "| 状态 | `pending` |",
+                        f"| 状态 | `in_progress` |\n| 认领 | {sender} |"
+                    )
+                    with open(task_path, "w", encoding="utf-8") as f:
+                        f.write(task_content)
+
+    except Exception as e:
+        # Never let Obsidian sync crash the bridge
+        print(f"[obsidian] sync error: {e}", file=sys.stderr)
 
 # ── File Initialization ────────────────────────────────────────
 def init_files():
@@ -122,6 +209,9 @@ def handle_message(msg_dict, sender_name):
     """Process an incoming message based on type, return response."""
     msg_type = msg_dict.get("type", "chat")
     content = msg_dict.get("content", "")
+
+    # Sync to Obsidian vault in real-time (silent; errors are non-fatal)
+    sync_to_obsidian(msg_dict)
 
     if msg_type == "chat":
         append_chat(msg_dict)

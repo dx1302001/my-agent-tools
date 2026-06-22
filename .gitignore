@@ -3,5 +3,9 @@ __pycache__/
 *.pyo
 shared/*.log
 shared/*.json
+collected.json
+dashboard.html
+_test_*
 .DS_Store
 Thumbs.db
+.omc/

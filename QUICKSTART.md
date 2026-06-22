@@ -94,9 +94,60 @@ K:\my two agent\
 ├── start_collab.bat    ← 双击一键启动
 ├── SKILL.md            ← Claude Code 技能定义
 ├── QUICKSTART.md       ← 你正在看的这个文件
+├── collect.py          ← 收集器：扫全部数据源 → JSON
+├── process_obsidian.py ← 生成 Obsidian 知识库
+├── process_dashboard.py← 生成 dashboard.html
 └── shared/             ← 运行时数据（自动创建）
 ```
 
 ---
 
+## 📊 知识收集系统（新！）
+
+### 一键收数据 → Obsidian → 可视化
+
+```bash
+# 1. 收集全部协作数据（桥接 + Claude 会话 + Codex 输出）
+python "K:\my two agent\collect.py"
+
+# 2. 生成 Obsidian 笔记库（.md + [[双向链接]] + 洞察）
+python "K:\my two agent\process_obsidian.py"
+
+# 3. 生成网页仪表盘
+python "K:\my two agent\process_dashboard.py"
+
+# 浏览器打开
+start K:\my two agent\dashboard.html
+```
+
+### 用 Obsidian 打开知识库
+
+1. 打开 Obsidian → **Open folder as vault**
+2. 选 `K:\agent-knowledge\` → 确认
+3. 图谱视图看全局关联
+
+### 实时同步
+
+桥接服务器启动后**自动**把每条消息写入 Obsidian vault，不需要手动跑。
+
+### 常用筛选
+
+```bash
+python collect.py --since 7d             # 最近 7 天
+python collect.py --bridge-only          # 只要桥接数据
+python process_obsidian.py --insights-only  # 只生成洞察
+```
+
+### 产出位置
+
+| 产物 | 位置 |
+|------|------|
+| Obsidian 笔记库 | `K:\agent-knowledge\` |
+| 网页仪表盘 | `K:\my two agent\dashboard.html` |
+| 收集数据 | `K:\my two agent\collected.json` |
+
+---
+
 > **记住三步**：**启动服务器** → **用 bridge_cli.py 发命令** → **看 status 了解全局**
+>
+> **知识三步**：**collect.py** → **process_obsidian.py** → **dashboard.html**
